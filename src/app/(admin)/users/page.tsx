@@ -28,38 +28,36 @@ export default function UsersPage() {
     <section className="space-y-4">
       <header>
         <h1 className="text-2xl font-semibold">Users</h1>
-        <p className="text-sm text-foreground/70">Passenger user accounts.</p>
+        <p className="text-sm text-[var(--text-secondary)]">Passenger user accounts.</p>
       </header>
 
-      {usersQuery.error ? (
-        <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {unwrapError(usersQuery.error)}
-        </p>
-      ) : null}
+      {usersQuery.error ? <p className="alert-error">{unwrapError(usersQuery.error)}</p> : null}
 
-      <div className="overflow-x-auto rounded-lg border border-black/10">
+      <div className="card overflow-x-auto">
         <table className="min-w-full text-sm">
-          <thead className="bg-black/5 text-left">
+          <thead className="bg-brand-tint text-left text-[var(--text-secondary)]">
             <tr>
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Phone</th>
-              <th className="px-3 py-2">Email</th>
-              <th className="px-3 py-2">Created</th>
-              <th className="px-3 py-2">Action</th>
+              <th className="px-4 py-3 font-semibold">Name</th>
+              <th className="px-4 py-3 font-semibold">Phone</th>
+              <th className="px-4 py-3 font-semibold">Email</th>
+              <th className="px-4 py-3 font-semibold">Created</th>
+              <th className="px-4 py-3 font-semibold">Action</th>
             </tr>
           </thead>
           <tbody>
             {users.map((user) => (
-              <tr key={user.id} className="border-t border-black/10">
-                <td className="px-3 py-2">{user.name}</td>
-                <td className="px-3 py-2">{user.phone}</td>
-                <td className="px-3 py-2">{user.email ?? "-"}</td>
-                <td className="px-3 py-2">{new Date(user.created_at).toLocaleString()}</td>
-                <td className="px-3 py-2">
+              <tr key={user.id} className="border-t border-border">
+                <td className="px-4 py-3 font-medium">{user.name}</td>
+                <td className="px-4 py-3">{user.phone}</td>
+                <td className="px-4 py-3">{user.email ?? "—"}</td>
+                <td className="px-4 py-3 text-[var(--text-secondary)]">
+                  {new Date(user.created_at).toLocaleString()}
+                </td>
+                <td className="px-4 py-3">
                   <button
                     type="button"
                     onClick={() => deleteMutation.mutate(user.id)}
-                    className="rounded-md border border-black/15 px-2 py-1 hover:bg-black/5"
+                    className="btn-danger text-xs"
                   >
                     Delete
                   </button>
@@ -68,7 +66,7 @@ export default function UsersPage() {
             ))}
             {!users.length ? (
               <tr>
-                <td className="px-3 py-4 text-center text-foreground/70" colSpan={5}>
+                <td className="px-4 py-6 text-center text-[var(--text-secondary)]" colSpan={5}>
                   No users found.
                 </td>
               </tr>
@@ -82,7 +80,7 @@ export default function UsersPage() {
           type="button"
           onClick={() => setOffset((current) => Math.max(0, current - PAGE_SIZE))}
           disabled={offset === 0}
-          className="rounded-md border border-black/15 px-3 py-2 disabled:opacity-60"
+          className="btn-outline text-sm"
         >
           Previous
         </button>
@@ -90,7 +88,7 @@ export default function UsersPage() {
           type="button"
           onClick={() => setOffset((current) => current + PAGE_SIZE)}
           disabled={users.length < PAGE_SIZE}
-          className="rounded-md border border-black/15 px-3 py-2 disabled:opacity-60"
+          className="btn-outline text-sm"
         >
           Next
         </button>

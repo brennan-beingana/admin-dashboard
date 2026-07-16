@@ -1,8 +1,10 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { AxiosError } from "axios";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createRider, deleteRider, getRiders, getRiderStats, unwrapError } from "@/lib/api";
+import { StatusPill } from "@/components/status-pill";
 
 const PAGE_SIZE = 20;
 
@@ -27,7 +29,15 @@ export default function RidersPage() {
     queryKey: ["rider-stats", selectedRiderId],
     queryFn: () => getRiderStats(selectedRiderId!),
     enabled: !!selectedRiderId,
+    // The backend rider-stats route is not always registered; don't retry 404s.
+    retry: false,
   });
+
+  // Wire-up fix: treat a missing rider-stats endpoint as "not available yet"
+  // instead of surfacing it as a hard error.
+  const statsUnavailable =
+    riderStatsQuery.error instanceof AxiosError &&
+    riderStatsQuery.error.response?.status === 404;
 
   const createMutation = useMutation({
     mutationFn: createRider,
@@ -76,10 +86,12 @@ export default function RidersPage() {
     <section className="space-y-6">
       <header>
         <h1 className="text-2xl font-semibold">Riders</h1>
-        <p className="text-sm text-foreground/70">Create, view, and remove rider accounts.</p>
+        <p className="text-sm text-[var(--text-secondary)]">
+          Create, view, and remove rider accounts.
+        </p>
       </header>
 
-      <form onSubmit={onCreateRider} className="rounded-lg border border-black/10 p-4">
+      <form onSubmit={onCreateRider} className="card p-5">
         <h2 className="text-lg font-semibold">Create Rider</h2>
         <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <input
@@ -87,115 +99,107 @@ export default function RidersPage() {
             value={fullName}
             onChange={(event) => setFullName(event.target.value)}
             placeholder="Full name"
-            className="rounded-md border border-black/15 px-3 py-2"
+            className="field"
           />
           <input
             required
             value={phoneNumber}
             onChange={(event) => setPhoneNumber(event.target.value)}
             placeholder="Phone number"
-            className="rounded-md border border-black/15 px-3 py-2"
+            className="field"
           />
           <input
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="Email (optional)"
-            className="rounded-md border border-black/15 px-3 py-2"
+            className="field"
           />
           <input
             required
             value={licensePlate}
             onChange={(event) => setLicensePlate(event.target.value)}
             placeholder="License plate"
-            className="rounded-md border border-black/15 px-3 py-2"
+            className="field"
           />
           <input
             value={vehicleType}
             onChange={(event) => setVehicleType(event.target.value)}
             placeholder="Vehicle type"
-            className="rounded-md border border-black/15 px-3 py-2"
+            className="field"
           />
-          <button
-            type="submit"
-            disabled={createMutation.isPending}
-            className="rounded-md bg-foreground px-4 py-2 text-background disabled:opacity-60"
-          >
+          <button type="submit" disabled={createMutation.isPending} className="btn-primary">
             {createMutation.isPending ? "Creating..." : "Create Rider"}
           </button>
         </div>
       </form>
 
-      <section className="rounded-lg border border-black/10 p-4">
+      <section className="card p-5">
         <h2 className="text-lg font-semibold">Rider Stats</h2>
         {!selectedRiderId ? (
-          <p className="mt-2 text-sm text-foreground/70">
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">
             Select a rider from the table below to view their statistics.
           </p>
         ) : riderStatsQuery.isLoading ? (
-          <p className="mt-2 text-sm text-foreground/70">Loading stats...</p>
-        ) : riderStatsQuery.error ? (
-          <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {unwrapError(riderStatsQuery.error)}
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">Loading stats...</p>
+        ) : statsUnavailable ? (
+          <p className="mt-3 rounded-[12px] border border-border bg-brand-tint-soft p-3 text-sm text-[var(--text-secondary)]">
+            Rider stats are not available from the backend yet (endpoint not
+            registered). Aggregate metrics are on the Dashboard.
           </p>
+        ) : riderStatsQuery.error ? (
+          <p className="mt-3 alert-error">{unwrapError(riderStatsQuery.error)}</p>
         ) : riderStatsQuery.data ? (
-          <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-md border border-black/10 p-3">
-              <p className="text-xs text-foreground/70">Total Rides</p>
-              <p className="text-2xl font-semibold">{riderStatsQuery.data.total_rides}</p>
-            </div>
-            <div className="rounded-md border border-black/10 p-3">
-              <p className="text-xs text-foreground/70">Completed</p>
-              <p className="text-2xl font-semibold">{riderStatsQuery.data.completed_rides}</p>
-            </div>
-            <div className="rounded-md border border-black/10 p-3">
-              <p className="text-xs text-foreground/70">Cancelled</p>
-              <p className="text-2xl font-semibold">{riderStatsQuery.data.cancelled_rides}</p>
-            </div>
-            <div className="rounded-md border border-black/10 p-3">
-              <p className="text-xs text-foreground/70">Distance (km)</p>
-              <p className="text-2xl font-semibold">{Number(riderStatsQuery.data.total_distance_km).toFixed(2)}</p>
-            </div>
-            <div className="rounded-md border border-black/10 p-3">
-              <p className="text-xs text-foreground/70">Ride Time (hrs)</p>
-              <p className="text-2xl font-semibold">{(riderStatsQuery.data.total_ride_time_seconds / 3600).toFixed(1)}</p>
-            </div>
-            <div className="rounded-md border border-black/10 p-3">
-              <p className="text-xs text-foreground/70">Avg Rating</p>
-              <p className="text-2xl font-semibold">{riderStatsQuery.data.avg_rating.toFixed(2)}</p>
-            </div>
-            <div className="rounded-md border border-black/10 p-3">
-              <p className="text-xs text-foreground/70">Total Ratings</p>
-              <p className="text-2xl font-semibold">{riderStatsQuery.data.total_ratings}</p>
-            </div>
-            <div className="rounded-md border border-black/10 p-3">
-              <p className="text-xs text-foreground/70">Completion Rate</p>
-              <p className="text-2xl font-semibold">
-                {riderStatsQuery.data.total_rides > 0
-                  ? ((riderStatsQuery.data.completed_rides / riderStatsQuery.data.total_rides) * 100).toFixed(1)
-                  : "0"}
-                %
-              </p>
-            </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+            {[
+              { label: "Total Rides", value: riderStatsQuery.data.total_rides },
+              { label: "Completed", value: riderStatsQuery.data.completed_rides },
+              { label: "Cancelled", value: riderStatsQuery.data.cancelled_rides },
+              {
+                label: "Distance (km)",
+                value: Number(riderStatsQuery.data.total_distance_km).toFixed(2),
+              },
+              {
+                label: "Ride Time (hrs)",
+                value: (riderStatsQuery.data.total_ride_time_seconds / 3600).toFixed(1),
+              },
+              { label: "Avg Rating", value: riderStatsQuery.data.avg_rating.toFixed(2) },
+              { label: "Total Ratings", value: riderStatsQuery.data.total_ratings },
+              {
+                label: "Completion Rate",
+                value: `${
+                  riderStatsQuery.data.total_rides > 0
+                    ? (
+                        (riderStatsQuery.data.completed_rides /
+                          riderStatsQuery.data.total_rides) *
+                        100
+                      ).toFixed(1)
+                    : "0"
+                }%`,
+              },
+            ].map((stat) => (
+              <div key={stat.label} className="rounded-[12px] border border-border p-3">
+                <p className="text-xs text-[var(--text-secondary)]">{stat.label}</p>
+                <p className="text-2xl font-semibold">{stat.value}</p>
+              </div>
+            ))}
           </div>
         ) : null}
       </section>
 
       {ridersQuery.error || actionError ? (
-        <p className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {actionError ?? unwrapError(ridersQuery.error)}
-        </p>
+        <p className="alert-error">{actionError ?? unwrapError(ridersQuery.error)}</p>
       ) : null}
 
-      <div className="overflow-x-auto rounded-lg border border-black/10">
+      <div className="card overflow-x-auto">
         <table className="min-w-full text-sm">
-          <thead className="bg-black/5 text-left">
+          <thead className="bg-brand-tint text-left text-[var(--text-secondary)]">
             <tr>
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Phone</th>
-              <th className="px-3 py-2">Vehicle</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Avg Rating</th>
-              <th className="px-3 py-2">Action</th>
+              <th className="px-4 py-3 font-semibold">Name</th>
+              <th className="px-4 py-3 font-semibold">Phone</th>
+              <th className="px-4 py-3 font-semibold">Vehicle</th>
+              <th className="px-4 py-3 font-semibold">Status</th>
+              <th className="px-4 py-3 font-semibold">Avg Rating</th>
+              <th className="px-4 py-3 font-semibold">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -203,23 +207,25 @@ export default function RidersPage() {
               <tr
                 key={rider.id}
                 onClick={() => setSelectedRiderId(rider.id)}
-                className={`border-t border-black/10 cursor-pointer ${
-                  selectedRiderId === rider.id ? "bg-blue-50" : "hover:bg-black/2"
+                className={`cursor-pointer border-t border-border transition ${
+                  selectedRiderId === rider.id ? "bg-brand-tint-soft" : "hover:bg-brand-tint-soft"
                 }`}
               >
-                <td className="px-3 py-2">{rider.name}</td>
-                <td className="px-3 py-2">{rider.phone}</td>
-                <td className="px-3 py-2">{rider.vehicle_plate}</td>
-                <td className="px-3 py-2">{rider.status}</td>
-                <td className="px-3 py-2">{rider.avg_rating ?? 0}</td>
-                <td className="px-3 py-2">
+                <td className="px-4 py-3 font-medium">{rider.name}</td>
+                <td className="px-4 py-3">{rider.phone}</td>
+                <td className="px-4 py-3">{rider.vehicle_plate}</td>
+                <td className="px-4 py-3">
+                  <StatusPill status={rider.status} />
+                </td>
+                <td className="px-4 py-3">{rider.avg_rating ?? 0}</td>
+                <td className="px-4 py-3">
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteMutation.mutate(rider.id);
                     }}
-                    className="rounded-md border border-black/15 px-2 py-1 hover:bg-black/5"
+                    className="btn-danger text-xs"
                   >
                     Delete
                   </button>
@@ -228,7 +234,7 @@ export default function RidersPage() {
             ))}
             {!riders.length ? (
               <tr>
-                <td className="px-3 py-4 text-center text-foreground/70" colSpan={6}>
+                <td className="px-4 py-6 text-center text-[var(--text-secondary)]" colSpan={6}>
                   No riders found.
                 </td>
               </tr>
@@ -242,7 +248,7 @@ export default function RidersPage() {
           type="button"
           onClick={() => setOffset((current) => Math.max(0, current - PAGE_SIZE))}
           disabled={offset === 0}
-          className="rounded-md border border-black/15 px-3 py-2 disabled:opacity-60"
+          className="btn-outline text-sm"
         >
           Previous
         </button>
@@ -250,7 +256,7 @@ export default function RidersPage() {
           type="button"
           onClick={() => setOffset((current) => current + PAGE_SIZE)}
           disabled={riders.length < PAGE_SIZE}
-          className="rounded-md border border-black/15 px-3 py-2 disabled:opacity-60"
+          className="btn-outline text-sm"
         >
           Next
         </button>

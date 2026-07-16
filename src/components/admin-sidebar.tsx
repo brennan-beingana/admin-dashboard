@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { clearAdminToken } from "@/lib/storage";
+import { BrandLogo } from "@/components/brand-logo";
 
 const links = [
   { href: "/dashboard", label: "Dashboard" },
@@ -22,21 +23,22 @@ export function AdminSidebar() {
   };
 
   return (
-    <aside className="w-64 shrink-0 border-r border-black/10 bg-background p-4">
+    <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-surface p-4">
       <div className="mb-8">
-        <h1 className="text-lg font-semibold">E-Bike Admin</h1>
-        <p className="text-xs text-foreground/70">Operations dashboard</p>
+        <BrandLogo subtitle="Operations dashboard" />
       </div>
 
-      <nav className="space-y-2">
+      <nav className="space-y-1">
         {links.map((link) => {
           const active = pathname === link.href;
           return (
             <Link
               key={link.href}
               href={link.href}
-              className={`block rounded-md px-3 py-2 text-sm transition ${
-                active ? "bg-foreground text-background" : "hover:bg-black/5"
+              className={`block rounded-[12px] px-3 py-2 text-sm font-medium transition ${
+                active
+                  ? "bg-brand text-white"
+                  : "text-foreground hover:bg-brand-tint-soft"
               }`}
             >
               {link.label}
@@ -45,11 +47,7 @@ export function AdminSidebar() {
         })}
       </nav>
 
-      <button
-        type="button"
-        onClick={logout}
-        className="mt-8 w-full rounded-md border border-black/15 px-3 py-2 text-sm hover:bg-black/5"
-      >
+      <button type="button" onClick={logout} className="btn-outline mt-auto w-full text-sm">
         Sign out
       </button>
     </aside>

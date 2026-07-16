@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { loginAdmin, unwrapError } from "@/lib/api";
 import { hasAdminToken, setAdminToken } from "@/lib/storage";
+import { BrandLogo } from "@/components/brand-logo";
 
 function LoginForm() {
   const router = useRouter();
@@ -39,41 +40,42 @@ function LoginForm() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md rounded-xl border border-black/10 p-6">
+      <div className="card w-full max-w-md p-8">
+        <div className="mb-6 flex justify-center">
+          <BrandLogo size={44} subtitle="Operations dashboard" />
+        </div>
         <h1 className="text-xl font-semibold">Admin Login</h1>
-        <p className="mt-1 text-sm text-foreground/70">Sign in to access the e-bike admin dashboard.</p>
+        <p className="mt-1 text-sm text-[var(--text-secondary)]">
+          Sign in to access the eBike admin dashboard.
+        </p>
 
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
           <label className="block">
-            <span className="mb-1 block text-sm">Email</span>
+            <span className="mb-1 block text-sm font-medium">Email</span>
             <input
               type="email"
               required
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              className="w-full rounded-md border border-black/15 px-3 py-2"
+              className="field w-full"
               placeholder="admin@example.com"
             />
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-sm">Password</span>
+            <span className="mb-1 block text-sm font-medium">Password</span>
             <input
               type="password"
               required
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="w-full rounded-md border border-black/15 px-3 py-2"
+              className="field w-full"
             />
           </label>
 
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          {error ? <p className="alert-error">{error}</p> : null}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-foreground px-4 py-2 text-background disabled:opacity-60"
-          >
+          <button type="submit" disabled={loading} className="btn-primary w-full">
             {loading ? "Signing in..." : "Sign in"}
           </button>
         </form>
