@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createChargingStation,
@@ -9,6 +10,18 @@ import {
   updateChargingStation,
   unwrapError,
 } from "@/lib/api";
+import type { MapMarker } from "@/components/location-map";
+import { parseLatLon } from "@/lib/geo";
+
+// Leaflet touches `window` on import, so load the map client-side only.
+const LocationMap = dynamic(() => import("@/components/location-map"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[420px] w-full items-center justify-center rounded-[16px] border border-border bg-brand-tint-soft text-sm text-[var(--text-secondary)]">
+      Loading map...
+    </div>
+  ),
+});
 
 const PAGE_SIZE = 20;
 
@@ -83,6 +96,22 @@ export default function ChargingStationsPage() {
     () => createMutation.isPending || updateMutation.isPending,
     [createMutation.isPending, updateMutation.isPending],
   );
+
+  const stationMarkers = useMemo<MapMarker[]>(() => {
+    return stations.flatMap((station) => {
+      const coords = parseLatLon(station.location);
+      if (!coords) return [];
+      return [
+        {
+          id: station.id,
+          lat: coords.lat,
+          lon: coords.lon,
+          title: station.name,
+          subtitle: `Capacity ${station.capacity}`,
+        },
+      ];
+    });
+  }, [stations]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -209,6 +238,21 @@ export default function ChargingStationsPage() {
           ) : null}
         </div>
       </form>
+
+      <section className="card p-5">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-lg font-semibold">Station Map</h2>
+          <span className="text-xs text-[var(--text-secondary)]">
+            {stationMarkers.length} of {stations.length} mapped
+          </span>
+        </div>
+        <div className="mt-4">
+          <LocationMap
+            markers={stationMarkers}
+            emptyLabel="No charging stations on this page have a valid location."
+          />
+        </div>
+      </section>
 
       {stationsQuery.error || actionError ? (
         <p className="alert-error">{actionError ?? unwrapError(stationsQuery.error)}</p>

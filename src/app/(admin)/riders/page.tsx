@@ -1,10 +1,23 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import { AxiosError } from "axios";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createRider, deleteRider, getRiders, getRiderStats, unwrapError } from "@/lib/api";
 import { StatusPill } from "@/components/status-pill";
+import type { MapMarker } from "@/components/location-map";
+import { parseLatLon } from "@/lib/geo";
+
+// Leaflet touches `window` on import, so load the map client-side only.
+const LocationMap = dynamic(() => import("@/components/location-map"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[420px] w-full items-center justify-center rounded-[16px] border border-border bg-brand-tint-soft text-sm text-[var(--text-secondary)]">
+      Loading map...
+    </div>
+  ),
+});
 
 const PAGE_SIZE = 20;
 
@@ -81,6 +94,26 @@ export default function RidersPage() {
   }
 
   const riders = ridersQuery.data?.riders ?? [];
+
+  const riderMarkers = useMemo<MapMarker[]>(() => {
+    return riders.flatMap((rider) => {
+      const coords = parseLatLon(rider.current_location);
+      if (!coords) return [];
+      return [
+        {
+          id: rider.id,
+          lat: coords.lat,
+          lon: coords.lon,
+          title: rider.name,
+          subtitle: [rider.vehicle_plate, rider.last_seen ? `Last seen ${rider.last_seen}` : null]
+            .filter(Boolean)
+            .join(" • "),
+          // Highlight the selected rider in the brand green; others muted.
+          tone: selectedRiderId === rider.id ? "#7AC143" : "#9AA3A0",
+        },
+      ];
+    });
+  }, [riders, selectedRiderId]);
 
   return (
     <section className="space-y-6">
@@ -184,6 +217,25 @@ export default function RidersPage() {
             ))}
           </div>
         ) : null}
+      </section>
+
+      <section className="card p-5">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-lg font-semibold">Rider Locations</h2>
+          <span className="text-xs text-[var(--text-secondary)]">
+            {riderMarkers.length} of {riders.length} with a known location
+          </span>
+        </div>
+        <p className="mt-1 text-sm text-[var(--text-secondary)]">
+          Last reported position of riders on this page. Only riders whose app has shared a
+          location appear here.
+        </p>
+        <div className="mt-4">
+          <LocationMap
+            markers={riderMarkers}
+            emptyLabel="No riders on this page have reported a location yet."
+          />
+        </div>
       </section>
 
       {ridersQuery.error || actionError ? (
