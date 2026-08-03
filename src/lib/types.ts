@@ -48,10 +48,24 @@ export type Rider = {
   photo_url?: string;
   license_photo_url?: string;
   nin_photo_url?: string;
+  // KYC + verification
+  verification_status: "pending" | "verified" | "rejected";
+  nin?: string;
+  bike_name?: string;
+  bike_model?: string;
+  current_residence?: string;
+  recommendation_letter_url?: string;
+  verification_note?: string;
+  verified_at?: string;
   current_location?: string;
   last_seen?: string;
   created_at: string;
   updated_at: string;
+};
+
+export type VerifyRiderRequest = {
+  status: "verified" | "rejected";
+  note?: string;
 };
 
 export type RidersResponse = {

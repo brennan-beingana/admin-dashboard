@@ -4,12 +4,20 @@ import { FormEvent, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { AxiosError } from "axios";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createRider, deleteRider, getRiders, getRiderStats, unwrapError } from "@/lib/api";
+import {
+  createRider,
+  deleteRider,
+  getRiders,
+  getRiderStats,
+  unwrapError,
+  verifyRider,
+} from "@/lib/api";
 import { StatusPill } from "@/components/status-pill";
+import { RiderVerificationCard } from "@/components/rider-verification-card";
 import type { MapMarker } from "@/components/location-map";
 import { parseLatLon } from "@/lib/geo";
 
-// Leaflet touches `window` on import, so load the map client-side only.
+// Google Maps needs the browser `window`, so load the map client-side only.
 const LocationMap = dynamic(() => import("@/components/location-map"), {
   ssr: false,
   loading: () => (
@@ -79,6 +87,25 @@ export default function RidersPage() {
     },
   });
 
+  const verifyMutation = useMutation({
+    mutationFn: ({
+      riderId,
+      status,
+      note,
+    }: {
+      riderId: string;
+      status: "verified" | "rejected";
+      note: string;
+    }) => verifyRider(riderId, { status, note: note || undefined }),
+    onSuccess: async () => {
+      setActionError(null);
+      await queryClient.invalidateQueries({ queryKey: ["riders"] });
+    },
+    onError: (error) => {
+      setActionError(unwrapError(error));
+    },
+  });
+
   async function onCreateRider(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setActionError(null);
@@ -94,6 +121,10 @@ export default function RidersPage() {
   }
 
   const riders = ridersQuery.data?.riders ?? [];
+  const pendingRiders = useMemo(
+    () => riders.filter((rider) => rider.verification_status === "pending"),
+    [riders],
+  );
 
   const riderMarkers = useMemo<MapMarker[]>(() => {
     return riders.flatMap((rider) => {
@@ -165,6 +196,37 @@ export default function RidersPage() {
           </button>
         </div>
       </form>
+
+      <section className="card p-5">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-lg font-semibold">Account Management</h2>
+          <span className="text-xs text-[var(--text-secondary)]">
+            {pendingRiders.length} awaiting verification
+          </span>
+        </div>
+        <p className="mt-1 text-sm text-[var(--text-secondary)]">
+          Review each rider&apos;s KYC submission and approve or reject them. Riders can sign in
+          but stay gated on a &ldquo;pending verification&rdquo; screen until approved.
+        </p>
+        {pendingRiders.length ? (
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            {pendingRiders.map((rider) => (
+              <RiderVerificationCard
+                key={rider.id}
+                rider={rider}
+                isPending={verifyMutation.isPending}
+                onVerify={(riderId, status, note) =>
+                  verifyMutation.mutate({ riderId, status, note })
+                }
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 rounded-[12px] border border-border bg-brand-tint-soft p-3 text-sm text-[var(--text-secondary)]">
+            No riders are awaiting verification on this page.
+          </p>
+        )}
+      </section>
 
       <section className="card p-5">
         <h2 className="text-lg font-semibold">Rider Stats</h2>
@@ -249,6 +311,7 @@ export default function RidersPage() {
               <th className="px-4 py-3 font-semibold">Name</th>
               <th className="px-4 py-3 font-semibold">Phone</th>
               <th className="px-4 py-3 font-semibold">Vehicle</th>
+              <th className="px-4 py-3 font-semibold">Verification</th>
               <th className="px-4 py-3 font-semibold">Status</th>
               <th className="px-4 py-3 font-semibold">Avg Rating</th>
               <th className="px-4 py-3 font-semibold">Action</th>
@@ -266,6 +329,9 @@ export default function RidersPage() {
                 <td className="px-4 py-3 font-medium">{rider.name}</td>
                 <td className="px-4 py-3">{rider.phone}</td>
                 <td className="px-4 py-3">{rider.vehicle_plate}</td>
+                <td className="px-4 py-3">
+                  <StatusPill status={rider.verification_status} />
+                </td>
                 <td className="px-4 py-3">
                   <StatusPill status={rider.status} />
                 </td>
@@ -286,7 +352,7 @@ export default function RidersPage() {
             ))}
             {!riders.length ? (
               <tr>
-                <td className="px-4 py-6 text-center text-[var(--text-secondary)]" colSpan={6}>
+                <td className="px-4 py-6 text-center text-[var(--text-secondary)]" colSpan={7}>
                   No riders found.
                 </td>
               </tr>

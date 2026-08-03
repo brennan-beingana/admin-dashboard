@@ -17,10 +17,14 @@ function toneForStatus(status: string): Tone {
     case "online":
     case "completed":
     case "active":
+    case "verified":
       return "brand";
     case "pending":
+    case "pending_verification":
     case "accepted":
       return "warning";
+    case "rejected":
+      return "danger";
     case "in_progress":
     case "in progress":
       return "info";

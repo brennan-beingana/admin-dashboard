@@ -13,7 +13,7 @@ import {
 import type { MapMarker } from "@/components/location-map";
 import { parseLatLon } from "@/lib/geo";
 
-// Leaflet touches `window` on import, so load the map client-side only.
+// Google Maps needs the browser `window`, so load the map client-side only.
 const LocationMap = dynamic(() => import("@/components/location-map"), {
   ssr: false,
   loading: () => (

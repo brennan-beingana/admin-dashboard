@@ -13,6 +13,7 @@ import type {
   RidesResponse,
   RidersResponse,
   UsersResponse,
+  VerifyRiderRequest,
 } from "@/lib/types";
 
 export type PageParams = {
@@ -76,6 +77,13 @@ export async function createRider(payload: CreateRiderRequest): Promise<void> {
 
 export async function deleteRider(riderId: string): Promise<void> {
   await http.delete(`/riders/${riderId}`);
+}
+
+export async function verifyRider(
+  riderId: string,
+  payload: VerifyRiderRequest,
+): Promise<void> {
+  await http.patch(`/riders/${riderId}/verify`, payload);
 }
 
 export async function getRiderStats(riderId: string): Promise<RiderStats> {
