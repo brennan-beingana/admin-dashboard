@@ -1,0 +1,60 @@
+name: Deploy dashboard to droplet
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+  workflow_dispatch:
+
+concurrency:
+  group: droplet-deploy-dashboard
+  cancel-in-progress: false
+
+jobs:
+  build-check:
+    # Fail here rather than on the droplet: a broken build on the box wastes
+    # 2-5 minutes and leaves the old container serving while CI looks red.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+
+  deploy:
+    needs: build-check
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DROPLET_SSH_KNOWN_HOSTS }}
+        run: |
+          test -n "$SSH_KEY"     || { echo "::error::DROPLET_SSH_KEY is not set"; exit 1; }
+          test -n "$KNOWN_HOSTS" || { echo "::error::DROPLET_SSH_KNOWN_HOSTS is not set"; exit 1; }
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY"     > ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Deploy
+        env:
+          DROPLET_HOST: ${{ secrets.DROPLET_HOST }}
+          DROPLET_USER: ${{ secrets.DROPLET_USER || 'deploy' }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 \
+              -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes \
+              -o ConnectTimeout=15 \
+              "$DROPLET_USER@$DROPLET_HOST" dashboard
