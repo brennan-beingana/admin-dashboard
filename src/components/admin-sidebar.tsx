@@ -30,7 +30,9 @@ export function AdminSidebar() {
 
       <nav className="space-y-1">
         {links.map((link) => {
-          const active = pathname === link.href;
+          // Sections have sub-routes (/riders/list, /rides/live, ...), so the
+          // top-level link stays active for anything beneath it.
+          const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
           return (
             <Link
               key={link.href}
