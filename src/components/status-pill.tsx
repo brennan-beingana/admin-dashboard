@@ -18,6 +18,7 @@ function toneForStatus(status: string): Tone {
     case "completed":
     case "active":
     case "verified":
+    case "delivered":
       return "brand";
     case "pending":
     case "pending_verification":
@@ -27,6 +28,8 @@ function toneForStatus(status: string): Tone {
       return "danger";
     case "in_progress":
     case "in progress":
+    case "picked_up":
+    case "in_transit":
       return "info";
     case "cancelled":
     case "canceled":
