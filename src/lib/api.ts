@@ -8,6 +8,7 @@ import type {
   ChargingStationsResponse,
   CreateOrUpdateStationRequest,
   CreateRiderRequest,
+  DeliveriesResponse,
   RideStatsResponse,
   RiderStats,
   RidesResponse,
@@ -103,6 +104,13 @@ export async function deleteUser(userId: string): Promise<void> {
 export async function getRides({ limit, offset }: PageParams): Promise<RidesResponse> {
   const { data } = await http.get<RidesResponse>(`/rides?limit=${limit}&offset=${offset}`);
   return transformResponse<RidesResponse>(data);
+}
+
+export async function getDeliveries({ limit, offset }: PageParams): Promise<DeliveriesResponse> {
+  const { data } = await http.get<DeliveriesResponse>(
+    `/deliveries?limit=${limit}&offset=${offset}`,
+  );
+  return transformResponse<DeliveriesResponse>(data);
 }
 
 export async function getChargingStations({

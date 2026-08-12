@@ -134,6 +134,40 @@ export type RidesResponse = {
   rides: Ride[];
 };
 
+export type Delivery = {
+  id: string;
+  sender_id: string;
+  courier_id?: string;
+  sender_name?: string;
+  sender_phone?: string;
+  courier_name?: string;
+  vehicle_plate?: string;
+  pickup_address: string;
+  dropoff_address: string;
+  pickup_lat: number;
+  pickup_lon: number;
+  dropoff_lat: number;
+  dropoff_lon: number;
+  package_size: string;
+  package_description: string;
+  recipient_name: string;
+  recipient_phone: string;
+  status: string;
+  distance_km: number;
+  price: number;
+  eta_seconds: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DeliveriesResponse = {
+  count: number;
+  total?: number;
+  limit?: number;
+  offset?: number;
+  deliveries: Delivery[];
+};
+
 export type ChargingStation = {
   id: string;
   name: string;
