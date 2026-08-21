@@ -51,7 +51,7 @@ function readUint32LE(hex: string, byteOffset: number): number {
   return new DataView(bytes.buffer).getUint32(0, true);
 }
 
-function isValidLatLon(lat: number, lon: number): boolean {
+export function isValidLatLon(lat: number, lon: number): boolean {
   return (
     Number.isFinite(lat) &&
     Number.isFinite(lon) &&

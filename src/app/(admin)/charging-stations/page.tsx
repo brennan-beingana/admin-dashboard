@@ -11,7 +11,7 @@ import {
   unwrapError,
 } from "@/lib/api";
 import type { MapMarker } from "@/components/location-map";
-import { parseLatLon } from "@/lib/geo";
+import { isValidLatLon } from "@/lib/geo";
 
 // Google Maps needs the browser `window`, so load the map client-side only.
 const LocationMap = dynamic(() => import("@/components/location-map"), {
@@ -40,6 +40,20 @@ const emptyForm: FormState = {
   capacity: "1",
   meta: "{}",
 };
+
+// Coordinates are usually copied out of Google Maps as one "lat, lng" string.
+// Pasting that into the latitude box otherwise yields a value that fails the
+// number check with no hint as to why, so split it across both fields instead.
+function applyLatInput(prev: FormState, value: string): FormState {
+  const pair = value.split(",");
+  if (pair.length === 2) {
+    const [lat, lon] = pair.map((part) => part.trim());
+    if (lat && lon && !Number.isNaN(Number(lat)) && !Number.isNaN(Number(lon))) {
+      return { ...prev, lat, lon };
+    }
+  }
+  return { ...prev, lat: value };
+}
 
 export default function ChargingStationsPage() {
   const [offset, setOffset] = useState(0);
@@ -99,13 +113,13 @@ export default function ChargingStationsPage() {
 
   const stationMarkers = useMemo<MapMarker[]>(() => {
     return stations.flatMap((station) => {
-      const coords = parseLatLon(station.location);
-      if (!coords) return [];
+      // The API sends numeric latitude/longitude, not a WKT string.
+      if (!isValidLatLon(station.latitude, station.longitude)) return [];
       return [
         {
           id: station.id,
-          lat: coords.lat,
-          lon: coords.lon,
+          lat: station.latitude,
+          lon: station.longitude,
           title: station.name,
           subtitle: `Capacity ${station.capacity}`,
         },
@@ -128,6 +142,14 @@ export default function ChargingStationsPage() {
       }
     }
 
+    // Guard the blank box before Number() does: Number("") is 0, not NaN, so a
+    // missing coordinate used to sail past a NaN check and move the station to
+    // null island off the coast of Africa.
+    if (!form.lat.trim() || !form.lon.trim()) {
+      setActionError("Latitude and longitude are both required.");
+      return;
+    }
+
     const payload = {
       name: form.name,
       lat: Number(form.lat),
@@ -141,6 +163,13 @@ export default function ChargingStationsPage() {
       return;
     }
 
+    if (!isValidLatLon(payload.lat, payload.lon)) {
+      setActionError(
+        "Latitude must be between -90 and 90 and longitude between -180 and 180.",
+      );
+      return;
+    }
+
     if (editingId) {
       updateMutation.mutate({ id: editingId, payload });
       return;
@@ -150,23 +179,15 @@ export default function ChargingStationsPage() {
   };
 
   const startEdit = (station: (typeof stations)[number]) => {
-    // Parse location from PostGIS point format: "POINT(lon lat)"
-    let lat = "";
-    let lon = "";
-
-    if (station.location && typeof station.location === "string") {
-      const match = station.location.match(/POINT\s*\(\s*([\d.]+)\s+([\d.]+)\s*\)/i);
-      if (match) {
-        lon = match[1];
-        lat = match[2];
-      }
-    }
-
+    // Prefill from the numeric fields the API returns. This used to read a
+    // non-existent `location` string and leave both boxes blank, which meant
+    // editing anything else on a station silently rewrote its position — see
+    // the empty-input guard in handleSubmit.
     setEditingId(station.id);
     setForm({
       name: station.name,
-      lat,
-      lon,
+      lat: Number.isFinite(station.latitude) ? String(station.latitude) : "",
+      lon: Number.isFinite(station.longitude) ? String(station.longitude) : "",
       capacity: String(station.capacity ?? 1),
       meta: JSON.stringify(station.meta ?? {}, null, 2),
     });
@@ -195,16 +216,16 @@ export default function ChargingStationsPage() {
           <input
             required
             value={form.lat}
-            onChange={(event) => setForm((prev) => ({ ...prev, lat: event.target.value }))}
+            onChange={(event) => setForm((prev) => applyLatInput(prev, event.target.value))}
             className="field"
-            placeholder="Latitude"
+            placeholder="Latitude (e.g. 0.347761)"
           />
           <input
             required
             value={form.lon}
             onChange={(event) => setForm((prev) => ({ ...prev, lon: event.target.value }))}
             className="field"
-            placeholder="Longitude"
+            placeholder="Longitude (e.g. 32.569030)"
           />
           <input
             value={form.capacity}
@@ -272,7 +293,11 @@ export default function ChargingStationsPage() {
             {stations.map((station) => (
               <tr key={station.id} className="border-t border-border">
                 <td className="px-4 py-3 font-medium">{station.name}</td>
-                <td className="px-4 py-3 text-[var(--text-secondary)]">{station.location}</td>
+                <td className="px-4 py-3 text-[var(--text-secondary)]">
+                  {isValidLatLon(station.latitude, station.longitude)
+                    ? `${station.latitude.toFixed(6)}, ${station.longitude.toFixed(6)}`
+                    : "—"}
+                </td>
                 <td className="px-4 py-3">{station.capacity}</td>
                 <td className="px-4 py-3">
                   <div className="flex gap-2">
