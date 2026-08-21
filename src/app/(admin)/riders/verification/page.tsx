@@ -5,10 +5,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getRiders, unwrapError, verifyRider } from "@/lib/api";
 import { RiderVerificationCard } from "@/components/rider-verification-card";
 import { StatusPill } from "@/components/status-pill";
+import { TableToolbar } from "@/components/table-toolbar";
+import { matchesSearch } from "@/lib/table-filter";
 import { WINDOW_SIZE } from "@/lib/paging";
 
 export default function RiderVerificationPage() {
   const [actionError, setActionError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [decision, setDecision] = useState<string>("pending");
   const queryClient = useQueryClient();
 
   const ridersQuery = useQuery({
@@ -37,6 +41,37 @@ export default function RiderVerificationPage() {
 
   const riders = useMemo(() => ridersQuery.data?.riders ?? [], [ridersQuery.data]);
 
+  const matches = useMemo(
+    () =>
+      riders.filter((rider) =>
+        matchesSearch(
+          rider,
+          [
+            (r) => r.name,
+            (r) => r.phone,
+            (r) => r.vehicle_plate,
+            (r) => r.nin,
+            (r) => r.current_residence,
+          ],
+          search,
+        ),
+      ),
+    [riders, search],
+  );
+
+  // The queue itself only ever shows riders still awaiting a decision; the
+  // filter chooses whether the *review cards* are the pending ones or a
+  // re-examination of something already decided.
+  const queue = useMemo(
+    () =>
+      matches.filter((rider) =>
+        decision === "pending"
+          ? rider.verification_status === "pending"
+          : rider.verification_status === decision,
+      ),
+    [matches, decision],
+  );
+
   const pending = useMemo(
     () => riders.filter((rider) => rider.verification_status === "pending"),
     [riders],
@@ -46,24 +81,50 @@ export default function RiderVerificationPage() {
   // confirm the decision landed without hunting through the full directory.
   const decided = useMemo(
     () =>
-      riders
+      matches
         .filter((rider) => rider.verification_status !== "pending")
         .sort((a, b) => (b.verified_at ?? "").localeCompare(a.verified_at ?? ""))
         .slice(0, 10),
-    [riders],
+    [matches],
   );
 
   return (
     <div className="space-y-6">
+      <TableToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search name, phone, plate, NIN, or residence"
+        filters={[
+          {
+            id: "verification-decision",
+            label: "Verification state",
+            value: decision,
+            options: [
+              { value: "pending", label: "Awaiting review" },
+              { value: "verified", label: "Verified" },
+              { value: "rejected", label: "Rejected" },
+            ],
+            onChange: setDecision,
+          },
+        ]}
+        summary={`${queue.length} shown · ${pending.length} awaiting review`}
+      />
+
       {ridersQuery.error || actionError ? (
         <p className="alert-error">{actionError ?? unwrapError(ridersQuery.error)}</p>
       ) : null}
 
       <section className="card p-5">
         <div className="flex items-baseline justify-between">
-          <h2 className="text-lg font-semibold">Awaiting verification</h2>
+          <h2 className="text-lg font-semibold">
+            {decision === "pending"
+              ? "Awaiting verification"
+              : decision === "verified"
+                ? "Verified riders"
+                : "Rejected riders"}
+          </h2>
           <span className="text-xs text-[var(--text-secondary)]">
-            {pending.length} in queue
+            {queue.length} shown
           </span>
         </div>
         <p className="mt-1 text-sm text-[var(--text-secondary)]">
@@ -73,9 +134,9 @@ export default function RiderVerificationPage() {
 
         {ridersQuery.isLoading ? (
           <p className="mt-4 text-sm text-[var(--text-secondary)]">Loading queue...</p>
-        ) : pending.length ? (
+        ) : queue.length ? (
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            {pending.map((rider) => (
+            {queue.map((rider) => (
               <RiderVerificationCard
                 key={rider.id}
                 rider={rider}
@@ -88,7 +149,9 @@ export default function RiderVerificationPage() {
           </div>
         ) : (
           <p className="mt-4 rounded-[12px] border border-border bg-brand-tint-soft p-3 text-sm text-[var(--text-secondary)]">
-            Nothing to review — every rider has been verified or rejected.
+            {search
+              ? "No riders match this search."
+              : "Nothing to review — every rider has been verified or rejected."}
           </p>
         )}
       </section>

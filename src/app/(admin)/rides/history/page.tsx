@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getRides, unwrapError } from "@/lib/api";
 import { RidesTable } from "@/components/rides-table";
+import { TableToolbar } from "@/components/table-toolbar";
+import { matchesSearch } from "@/lib/table-filter";
 import { PAGE_SIZE } from "@/lib/paging";
 import { isLiveRide } from "@/lib/ride-status";
 
@@ -20,6 +22,7 @@ const FILTER_LABELS: Record<Filter, string> = {
 export default function RideHistoryPage() {
   const [offset, setOffset] = useState(0);
   const [filter, setFilter] = useState<Filter>("closed");
+  const [search, setSearch] = useState("");
 
   // History is unbounded, so this tab pages against the API rather than
   // scanning a fixed window like the Live tab does.
@@ -34,18 +37,26 @@ export default function RideHistoryPage() {
     () =>
       rides.filter((ride) => {
         const status = ride.status?.toLowerCase() ?? "";
-        switch (filter) {
-          case "closed":
-            return !isLiveRide(status);
-          case "completed":
-            return status === "completed";
-          case "cancelled":
-            return status === "cancelled" || status === "canceled";
-          case "all":
-            return true;
-        }
+        const passesStatus = (() => {
+          switch (filter) {
+            case "closed":
+              return !isLiveRide(status);
+            case "completed":
+              return status === "completed";
+            case "cancelled":
+              return status === "cancelled" || status === "canceled";
+            case "all":
+              return true;
+          }
+        })();
+        if (!passesStatus) return false;
+        return matchesSearch(
+          ride,
+          [(r) => r.origin_name, (r) => r.destination_name, (r) => r.status, (r) => r.id],
+          search,
+        );
       }),
-    [rides, filter],
+    [rides, filter, search],
   );
 
   const pageRevenue = useMemo(
@@ -58,26 +69,27 @@ export default function RideHistoryPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <select
-          value={filter}
-          onChange={(event) => setFilter(event.target.value as Filter)}
-          className="field"
-        >
-          {FILTERS.map((value) => (
-            <option key={value} value={value}>
-              {FILTER_LABELS[value]}
-            </option>
-          ))}
-        </select>
-        <span className="text-xs text-[var(--text-secondary)]">
-          {visible.length} of {rides.length} rides on this page
-        </span>
-        <span className="ml-auto text-xs text-[var(--text-secondary)]">
-          Completed revenue on this page:{" "}
-          <span className="font-semibold text-foreground">{pageRevenue.toFixed(2)}</span>
-        </span>
-      </div>
+      <TableToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search origin, destination, or status"
+        filters={[
+          {
+            id: "rides-history-status",
+            label: "Ride status",
+            value: filter,
+            options: FILTERS.map((value) => ({ value, label: FILTER_LABELS[value] })),
+            onChange: (value) => setFilter(value as Filter),
+          },
+        ]}
+        summary={`${visible.length} of ${rides.length} rides on this page`}
+        actions={
+          <span className="text-xs text-[var(--text-secondary)]">
+            Completed revenue on this page:{" "}
+            <span className="font-semibold text-foreground">{pageRevenue.toFixed(2)}</span>
+          </span>
+        }
+      />
 
       {ridesQuery.error ? <p className="alert-error">{unwrapError(ridesQuery.error)}</p> : null}
 

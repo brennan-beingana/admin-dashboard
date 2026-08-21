@@ -2,12 +2,16 @@
 
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import { AxiosError } from "axios";
 import { useQuery } from "@tanstack/react-query";
-import { getRiders, unwrapError } from "@/lib/api";
+import { getRiders, getRiderStats, unwrapError } from "@/lib/api";
 import { StatusPill } from "@/components/status-pill";
+import { RiderDetailCard } from "@/components/rider-detail-card";
+import { TableToolbar } from "@/components/table-toolbar";
 import type { MapMarker } from "@/components/location-map";
 import { parseLatLon } from "@/lib/geo";
 import { WINDOW_SIZE } from "@/lib/paging";
+import { matchesSearch } from "@/lib/table-filter";
 
 // Google Maps needs the browser `window`, so load the map client-side only.
 const LocationMap = dynamic(() => import("@/components/location-map"), {
@@ -19,11 +23,19 @@ const LocationMap = dynamic(() => import("@/components/location-map"), {
   ),
 });
 
-const STATUS_FILTERS = ["all", "available", "busy", "offline"] as const;
-type StatusFilter = (typeof STATUS_FILTERS)[number];
+const STATUS_FILTERS = [
+  { value: "all", label: "All rider states" },
+  { value: "available", label: "Available" },
+  { value: "busy", label: "Busy" },
+  { value: "offline", label: "Offline" },
+] as const;
+
+const SELECTED_TONE = "#7AC143";
+const MUTED_TONE = "#9AA3A0";
 
 export default function RiderMapPage() {
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
   const [selectedRiderId, setSelectedRiderId] = useState<string | null>(null);
 
   const ridersQuery = useQuery({
@@ -33,14 +45,33 @@ export default function RiderMapPage() {
     refetchInterval: 30_000,
   });
 
+  // Only fetched once a pin is actually opened — the list view needs none of it.
+  const riderStatsQuery = useQuery({
+    queryKey: ["rider-stats", selectedRiderId],
+    queryFn: () => getRiderStats(selectedRiderId!),
+    enabled: !!selectedRiderId,
+    retry: false,
+  });
+
+  const statsUnavailable =
+    riderStatsQuery.error instanceof AxiosError &&
+    riderStatsQuery.error.response?.status === 404;
+
   const riders = useMemo(() => ridersQuery.data?.riders ?? [], [ridersQuery.data]);
 
   const filtered = useMemo(
     () =>
-      statusFilter === "all"
-        ? riders
-        : riders.filter((rider) => (rider.status ?? "").toLowerCase() === statusFilter),
-    [riders, statusFilter],
+      riders.filter((rider) => {
+        if (statusFilter !== "all" && (rider.status ?? "").toLowerCase() !== statusFilter) {
+          return false;
+        }
+        return matchesSearch(
+          rider,
+          [(r) => r.name, (r) => r.phone, (r) => r.vehicle_plate, (r) => r.bike_name],
+          search,
+        );
+      }),
+    [riders, statusFilter, search],
   );
 
   const located = useMemo(
@@ -59,45 +90,72 @@ export default function RiderMapPage() {
         lat: coords.lat,
         lon: coords.lon,
         title: rider.name,
-        subtitle: [rider.vehicle_plate, rider.last_seen ? `Last seen ${rider.last_seen}` : null]
-          .filter(Boolean)
-          .join(" • "),
-        // Highlight the selected rider in the brand green; others muted.
-        tone: selectedRiderId === rider.id ? "#7AC143" : "#9AA3A0",
+        subtitle: rider.vehicle_plate,
+        // Colour follows selection state, which is UI, not series identity.
+        tone: selectedRiderId === rider.id ? SELECTED_TONE : MUTED_TONE,
       })),
+    [located, selectedRiderId],
+  );
+
+  const selected = useMemo(
+    () => located.find(({ rider }) => rider.id === selectedRiderId) ?? null,
     [located, selectedRiderId],
   );
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <select
-          value={statusFilter}
-          onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
-          className="field"
-        >
-          {STATUS_FILTERS.map((value) => (
-            <option key={value} value={value}>
-              {value === "all" ? "All rider states" : value}
-            </option>
-          ))}
-        </select>
-        <span className="text-xs text-[var(--text-secondary)]">
-          {located.length} of {filtered.length} riders have reported a position
-        </span>
-        <span className="ml-auto text-xs text-[var(--text-tertiary)]">
-          Last-reported positions, refreshed every 30s
-        </span>
-      </div>
+      <TableToolbar
+        search={search}
+        onSearchChange={(value) => {
+          setSearch(value);
+          setSelectedRiderId(null);
+        }}
+        searchPlaceholder="Search name, phone, plate, or bike"
+        filters={[
+          {
+            id: "rider-map-status",
+            label: "Rider state",
+            value: statusFilter,
+            options: STATUS_FILTERS,
+            onChange: (value) => {
+              setStatusFilter(value);
+              setSelectedRiderId(null);
+            },
+          },
+        ]}
+        summary={`${located.length} of ${filtered.length} riders have reported a position`}
+        actions={
+          <span className="text-xs text-[var(--text-tertiary)]">
+            Last-reported positions, refreshed every 30s
+          </span>
+        }
+      />
 
       {ridersQuery.error ? <p className="alert-error">{unwrapError(ridersQuery.error)}</p> : null}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
-        <LocationMap
-          markers={markers}
-          className="h-[620px] w-full overflow-hidden rounded-[16px] border border-border"
-          emptyLabel="No riders in this view have reported a location yet."
-        />
+        {/* Relative so the detail card can sit over the map rather than in a
+            Google InfoWindow, which the dashboard's styles cannot reach into. */}
+        <div className="relative">
+          <LocationMap
+            markers={markers}
+            selectedId={selectedRiderId}
+            onMarkerSelect={setSelectedRiderId}
+            className="h-[620px] w-full overflow-hidden rounded-[16px] border border-border"
+            emptyLabel="No riders in this view have reported a location yet."
+          />
+
+          {selected ? (
+            <RiderDetailCard
+              rider={selected.rider}
+              coords={selected.coords}
+              stats={riderStatsQuery.data}
+              statsLoading={riderStatsQuery.isLoading}
+              statsUnavailable={statsUnavailable}
+              onClose={() => setSelectedRiderId(null)}
+            />
+          ) : null}
+        </div>
 
         <div className="card max-h-[620px] overflow-y-auto p-2">
           {located.length ? (
@@ -107,6 +165,7 @@ export default function RiderMapPage() {
                   <button
                     type="button"
                     onClick={() => setSelectedRiderId(rider.id)}
+                    aria-pressed={selectedRiderId === rider.id}
                     className={`w-full rounded-[12px] px-3 py-2 text-left transition ${
                       selectedRiderId === rider.id
                         ? "bg-brand-tint"

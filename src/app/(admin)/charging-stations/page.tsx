@@ -12,6 +12,8 @@ import {
 } from "@/lib/api";
 import type { MapMarker } from "@/components/location-map";
 import { isValidLatLon } from "@/lib/geo";
+import { TableToolbar } from "@/components/table-toolbar";
+import { matchesSearch } from "@/lib/table-filter";
 
 // Google Maps needs the browser `window`, so load the map client-side only.
 const LocationMap = dynamic(() => import("@/components/location-map"), {
@@ -60,6 +62,8 @@ export default function ChargingStationsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [mapped, setMapped] = useState<string>("all");
   const queryClient = useQueryClient();
 
   const stationsQuery = useQuery({
@@ -104,7 +108,27 @@ export default function ChargingStationsPage() {
     },
   });
 
-  const stations = stationsQuery.data?.charging_stations ?? [];
+  const allStations = useMemo(
+    () => stationsQuery.data?.charging_stations ?? [],
+    [stationsQuery.data],
+  );
+
+  // "Unmapped" is worth filtering for: a station with no usable coordinates is
+  // invisible on the map and in the apps, and is exactly what needs fixing.
+  const stations = useMemo(
+    () =>
+      allStations.filter((station) => {
+        const hasLocation = isValidLatLon(station.latitude, station.longitude);
+        if (mapped === "mapped" && !hasLocation) return false;
+        if (mapped === "unmapped" && hasLocation) return false;
+        return matchesSearch(
+          station,
+          [(item) => item.name, (item) => item.description, (item) => item.location_string],
+          search,
+        );
+      }),
+    [allStations, search, mapped],
+  );
 
   const isMutating = useMemo(
     () => createMutation.isPending || updateMutation.isPending,
@@ -259,6 +283,26 @@ export default function ChargingStationsPage() {
           ) : null}
         </div>
       </form>
+
+      <TableToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search station name or description"
+        filters={[
+          {
+            id: "stations-mapped",
+            label: "Location",
+            value: mapped,
+            options: [
+              { value: "all", label: "All stations" },
+              { value: "mapped", label: "With coordinates" },
+              { value: "unmapped", label: "Missing coordinates" },
+            ],
+            onChange: setMapped,
+          },
+        ]}
+        summary={`${stations.length} of ${allStations.length} stations`}
+      />
 
       <section className="card p-5">
         <div className="flex items-baseline justify-between">

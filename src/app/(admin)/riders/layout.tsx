@@ -25,6 +25,7 @@ export default function RidersLayout({ children }: { children: React.ReactNode }
         { href: "/riders/verification", label: "Verification", badge: pendingCount },
         { href: "/riders/list", label: "Rider List" },
         { href: "/riders/map", label: "Map" },
+        { href: "/riders/analytics", label: "Analytics" },
       ]}
     >
       {children}

@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getDeliveries, unwrapError } from "@/lib/api";
 import { DeliveriesTable } from "@/components/deliveries-table";
+import { TableToolbar } from "@/components/table-toolbar";
+import { matchesSearch } from "@/lib/table-filter";
 import { PAGE_SIZE } from "@/lib/paging";
 import { isLiveDelivery } from "@/lib/delivery-status";
 
@@ -20,6 +22,7 @@ const FILTER_LABELS: Record<Filter, string> = {
 export default function DeliveryHistoryPage() {
   const [offset, setOffset] = useState(0);
   const [filter, setFilter] = useState<Filter>("closed");
+  const [search, setSearch] = useState("");
 
   // History is unbounded, so this tab pages against the API rather than
   // scanning a fixed window like the Live tab does.
@@ -37,18 +40,33 @@ export default function DeliveryHistoryPage() {
     () =>
       deliveries.filter((delivery) => {
         const status = delivery.status?.toLowerCase() ?? "";
-        switch (filter) {
-          case "closed":
-            return !isLiveDelivery(status);
-          case "delivered":
-            return status === "delivered";
-          case "cancelled":
-            return status === "cancelled" || status === "canceled";
-          case "all":
-            return true;
-        }
+        const passesStatus = (() => {
+          switch (filter) {
+            case "closed":
+              return !isLiveDelivery(status);
+            case "delivered":
+              return status === "delivered";
+            case "cancelled":
+              return status === "cancelled" || status === "canceled";
+            case "all":
+              return true;
+          }
+        })();
+        if (!passesStatus) return false;
+        return matchesSearch(
+          delivery,
+          [
+            (d) => d.pickup_address,
+            (d) => d.dropoff_address,
+            (d) => d.recipient_name,
+            (d) => d.recipient_phone,
+            (d) => d.courier_name,
+            (d) => d.status,
+          ],
+          search,
+        );
       }),
-    [deliveries, filter],
+    [deliveries, filter, search],
   );
 
   const pageRevenue = useMemo(
@@ -61,26 +79,27 @@ export default function DeliveryHistoryPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <select
-          value={filter}
-          onChange={(event) => setFilter(event.target.value as Filter)}
-          className="field"
-        >
-          {FILTERS.map((value) => (
-            <option key={value} value={value}>
-              {FILTER_LABELS[value]}
-            </option>
-          ))}
-        </select>
-        <span className="text-xs text-[var(--text-secondary)]">
-          {visible.length} of {deliveries.length} deliveries on this page
-        </span>
-        <span className="ml-auto text-xs text-[var(--text-secondary)]">
-          Delivered revenue on this page:{" "}
-          <span className="font-semibold text-foreground">{pageRevenue.toFixed(2)}</span>
-        </span>
-      </div>
+      <TableToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search address, recipient, or courier"
+        filters={[
+          {
+            id: "deliveries-history-status",
+            label: "Delivery status",
+            value: filter,
+            options: FILTERS.map((value) => ({ value, label: FILTER_LABELS[value] })),
+            onChange: (value) => setFilter(value as Filter),
+          },
+        ]}
+        summary={`${visible.length} of ${deliveries.length} deliveries on this page`}
+        actions={
+          <span className="text-xs text-[var(--text-secondary)]">
+            Delivered revenue on this page:{" "}
+            <span className="font-semibold text-foreground">{pageRevenue.toFixed(2)}</span>
+          </span>
+        }
+      />
 
       {deliveriesQuery.error ? (
         <p className="alert-error">{unwrapError(deliveriesQuery.error)}</p>
