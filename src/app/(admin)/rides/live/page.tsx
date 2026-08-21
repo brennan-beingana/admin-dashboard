@@ -1,13 +1,18 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getRides, unwrapError } from "@/lib/api";
 import { RidesTable } from "@/components/rides-table";
+import { TableToolbar } from "@/components/table-toolbar";
+import { matchesSearch } from "@/lib/table-filter";
 import { WINDOW_SIZE } from "@/lib/paging";
 import { LIVE_RIDE_STATUSES, isLiveRide } from "@/lib/ride-status";
 
 export default function LiveRidesPage() {
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+
   const ridesQuery = useQuery({
     queryKey: ["rides", WINDOW_SIZE, 0],
     queryFn: () => getRides({ limit: WINDOW_SIZE, offset: 0 }),
@@ -22,6 +27,23 @@ export default function LiveRidesPage() {
         .filter((ride) => isLiveRide(ride.status))
         .sort((a, b) => b.created_at.localeCompare(a.created_at)),
     [rides],
+  );
+
+  // The status tiles above always count every in-flight ride; only the table
+  // narrows, so the filter cannot make the headline numbers disagree with it.
+  const visible = useMemo(
+    () =>
+      live.filter((ride) => {
+        if (statusFilter !== "all" && (ride.status ?? "").toLowerCase() !== statusFilter) {
+          return false;
+        }
+        return matchesSearch(
+          ride,
+          [(r) => r.origin_name, (r) => r.destination_name, (r) => r.status, (r) => r.id],
+          search,
+        );
+      }),
+    [live, statusFilter, search],
   );
 
   const byStatus = useMemo(
@@ -46,19 +68,35 @@ export default function LiveRidesPage() {
         ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-xs text-[var(--text-secondary)]">
-          {live.length} rides in flight
-        </span>
-        <span className="ml-auto text-xs text-[var(--text-tertiary)]">
-          Refreshed every 20s
-        </span>
-      </div>
+      <TableToolbar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search origin, destination, or status"
+        filters={[
+          {
+            id: "rides-live-status",
+            label: "Live status",
+            value: statusFilter,
+            options: [
+              { value: "all", label: "All live statuses" },
+              ...LIVE_RIDE_STATUSES.map((status) => ({
+                value: status,
+                label: status.replace("_", " "),
+              })),
+            ],
+            onChange: setStatusFilter,
+          },
+        ]}
+        summary={`${visible.length} of ${live.length} rides in flight`}
+        actions={
+          <span className="text-xs text-[var(--text-tertiary)]">Refreshed every 20s</span>
+        }
+      />
 
       {ridesQuery.error ? <p className="alert-error">{unwrapError(ridesQuery.error)}</p> : null}
 
       <RidesTable
-        rides={live}
+        rides={visible}
         isLoading={ridesQuery.isLoading}
         emptyLabel="No rides are pending, accepted, or in progress right now."
       />

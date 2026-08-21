@@ -11,15 +11,30 @@ import {
   unwrapError,
 } from "@/lib/api";
 import { StatusPill } from "@/components/status-pill";
+import { TableToolbar } from "@/components/table-toolbar";
+import { matchesSearch } from "@/lib/table-filter";
 import { PAGE_SIZE, WINDOW_SIZE } from "@/lib/paging";
 
 const VERIFICATION_FILTERS = ["all", "pending", "verified", "rejected"] as const;
 type VerificationFilter = (typeof VERIFICATION_FILTERS)[number];
 
+const VERIFICATION_OPTIONS = VERIFICATION_FILTERS.map((value) => ({
+  value,
+  label: value === "all" ? "All verification states" : value,
+}));
+
+const STATUS_OPTIONS = [
+  { value: "all", label: "All rider states" },
+  { value: "available", label: "Available" },
+  { value: "busy", label: "Busy" },
+  { value: "offline", label: "Offline" },
+];
+
 export default function RiderListPage() {
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState("");
   const [verification, setVerification] = useState<VerificationFilter>("all");
+  const [status, setStatus] = useState<string>("all");
   const [selectedRiderId, setSelectedRiderId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -43,6 +58,7 @@ export default function RiderListPage() {
 
   const onSearchChange = applyFilter(setSearch);
   const onVerificationChange = applyFilter(setVerification);
+  const onStatusChange = applyFilter(setStatus);
 
   // Same key as the section layout, so the tab switch is a cache hit. Filtering
   // and paging happen client-side over this window until the API supports them.
@@ -102,16 +118,26 @@ export default function RiderListPage() {
 
   const riders = useMemo(() => ridersQuery.data?.riders ?? [], [ridersQuery.data]);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    return riders.filter((rider) => {
-      if (verification !== "all" && rider.verification_status !== verification) return false;
-      if (!term) return true;
-      return [rider.name, rider.phone, rider.vehicle_plate, rider.email]
-        .filter(Boolean)
-        .some((field) => field!.toLowerCase().includes(term));
-    });
-  }, [riders, search, verification]);
+  const filtered = useMemo(
+    () =>
+      riders.filter((rider) => {
+        if (verification !== "all" && rider.verification_status !== verification) return false;
+        if (status !== "all" && (rider.status ?? "").toLowerCase() !== status) return false;
+        return matchesSearch(
+          rider,
+          [
+            (r) => r.name,
+            (r) => r.phone,
+            (r) => r.vehicle_plate,
+            (r) => r.email,
+            (r) => r.bike_name,
+            (r) => r.nin,
+          ],
+          search,
+        );
+      }),
+    [riders, search, verification, status],
+  );
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
@@ -119,35 +145,37 @@ export default function RiderListPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <input
-          value={search}
-          onChange={(event) => onSearchChange(event.target.value)}
-          placeholder="Search name, phone, or plate"
-          className="field w-full sm:w-72"
-        />
-        <select
-          value={verification}
-          onChange={(event) => onVerificationChange(event.target.value as VerificationFilter)}
-          className="field"
-        >
-          {VERIFICATION_FILTERS.map((value) => (
-            <option key={value} value={value}>
-              {value === "all" ? "All verification states" : value}
-            </option>
-          ))}
-        </select>
-        <span className="text-xs text-[var(--text-secondary)]">
-          {filtered.length} of {riders.length} riders
-        </span>
-        <button
-          type="button"
-          onClick={() => setShowCreate((open) => !open)}
-          className="btn-primary ml-auto text-sm"
-        >
-          {showCreate ? "Cancel" : "+ New Rider"}
-        </button>
-      </div>
+      <TableToolbar
+        search={search}
+        onSearchChange={onSearchChange}
+        searchPlaceholder="Search name, phone, plate, bike, or NIN"
+        filters={[
+          {
+            id: "riders-verification",
+            label: "Verification state",
+            value: verification,
+            options: VERIFICATION_OPTIONS,
+            onChange: (value) => onVerificationChange(value as VerificationFilter),
+          },
+          {
+            id: "riders-status",
+            label: "Rider state",
+            value: status,
+            options: STATUS_OPTIONS,
+            onChange: onStatusChange,
+          },
+        ]}
+        summary={`${filtered.length} of ${riders.length} riders`}
+        actions={
+          <button
+            type="button"
+            onClick={() => setShowCreate((open) => !open)}
+            className="btn-primary text-sm"
+          >
+            {showCreate ? "Cancel" : "+ New Rider"}
+          </button>
+        }
+      />
 
       {showCreate ? (
         <form onSubmit={onCreateRider} className="card p-5">

@@ -1,24 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { getAdminStats, getRideStats, unwrapError } from "@/lib/api";
-
-const BRAND = "#7ac143";
-const BRAND_DARK = "#5a9e2f";
-
-function toDateInputString(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
+import { ChartCard } from "@/components/charts/chart-card";
+import { TrendChart } from "@/components/charts/trend-chart";
+import { SERIES } from "@/components/charts/chart-theme";
+import { fillDailyRideStats, formatDayLabel, toDateInputString } from "@/lib/analytics";
 
 export default function DashboardPage() {
   const today = useMemo(() => new Date(), []);
@@ -42,6 +31,16 @@ export default function DashboardPage() {
     queryFn: () => getRideStats(startDate, endDate),
   });
 
+  const volume = useMemo(
+    () =>
+      fillDailyRideStats(rideStatsQuery.data?.stats ?? [], startDate, endDate).map((stat) => ({
+        label: formatDayLabel(stat.date),
+        total_rides: stat.total_rides,
+        completed_rides: stat.completed_rides,
+      })),
+    [rideStatsQuery.data, startDate, endDate],
+  );
+
   const cards = [
     { label: "Total Users", value: statsQuery.data?.total_users ?? 0 },
     { label: "Total Riders", value: statsQuery.data?.total_riders ?? 0 },
@@ -61,7 +60,15 @@ export default function DashboardPage() {
       <header>
         <h1 className="text-2xl font-semibold">Dashboard</h1>
         <p className="mt-1 text-sm text-[var(--text-secondary)]">
-          Platform overview and ride performance trends.
+          Platform overview and ride performance trends. Deeper breakdowns live under{" "}
+          <Link href="/rides/analytics" className="text-brand-dark underline">
+            Rides → Analytics
+          </Link>{" "}
+          and{" "}
+          <Link href="/riders/analytics" className="text-brand-dark underline">
+            Riders → Analytics
+          </Link>
+          .
         </p>
       </header>
 
@@ -71,82 +78,63 @@ export default function DashboardPage() {
         {cards.map((card) => (
           <div key={card.label} className="card p-4">
             <p className="text-sm text-[var(--text-secondary)]">{card.label}</p>
+            {/* Proportional figures: tabular-nums makes a large standalone
+                number look loose, and nothing aligns vertically here. */}
             <p className="mt-2 text-2xl font-semibold">{card.value}</p>
           </div>
         ))}
       </div>
 
-      <section className="card p-5">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">Ride Stats</h2>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Daily rides and completed rides by date range.
-            </p>
-          </div>
+      {/* The range control sits above the card it scopes rather than inside it,
+          so it reads as a page filter and can grow to cover more charts. */}
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="text-sm">
+          <span className="mb-1 block font-medium">Start</span>
+          <input
+            type="date"
+            value={startDate}
+            max={endDate}
+            onChange={(event) => setStartDate(event.target.value)}
+            className="field"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block font-medium">End</span>
+          <input
+            type="date"
+            value={endDate}
+            min={startDate}
+            onChange={(event) => setEndDate(event.target.value)}
+            className="field"
+          />
+        </label>
+      </div>
 
-          <div className="flex flex-wrap gap-2">
-            <label className="text-sm">
-              <span className="mb-1 block font-medium">Start</span>
-              <input
-                type="date"
-                value={startDate}
-                max={endDate}
-                onChange={(event) => setStartDate(event.target.value)}
-                className="field"
-              />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block font-medium">End</span>
-              <input
-                type="date"
-                value={endDate}
-                min={startDate}
-                onChange={(event) => setEndDate(event.target.value)}
-                className="field"
-              />
-            </label>
-          </div>
-        </div>
-
-        {rideStatsQuery.error ? (
-          <p className="alert-error">{unwrapError(rideStatsQuery.error)}</p>
-        ) : null}
-
-        <div className="h-72 w-full">
-          <ResponsiveContainer>
-            <LineChart data={rideStatsQuery.data?.stats ?? []}>
-              <CartesianGrid stroke="#e6e8e1" strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="date" stroke="#9ca3af" fontSize={12} tickLine={false} />
-              <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-              <Tooltip
-                contentStyle={{
-                  borderRadius: 12,
-                  border: "1px solid #e6e8e1",
-                  boxShadow: "0 4px 16px rgba(0,0,0,0.06)",
-                }}
-              />
-              <Line
-                type="monotone"
-                dataKey="total_rides"
-                name="Total rides"
-                stroke={BRAND}
-                strokeWidth={2.5}
-                dot={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="completed_rides"
-                name="Completed"
-                stroke={BRAND_DARK}
-                strokeWidth={2}
-                strokeDasharray="5 4"
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
+      <ChartCard
+        title="Rides over time"
+        description="Daily ride volume against how many of them completed."
+        columns={[
+          { key: "label", label: "Day" },
+          { key: "total_rides", label: "Total", numeric: true },
+          { key: "completed_rides", label: "Completed", numeric: true },
+        ]}
+        rows={volume}
+        isLoading={rideStatsQuery.isLoading}
+        isRefreshing={rideStatsQuery.isFetching && !rideStatsQuery.isLoading}
+        error={rideStatsQuery.error ? unwrapError(rideStatsQuery.error) : null}
+        isEmpty={!volume.length}
+        emptyLabel="No rides in this date range."
+      >
+        <TrendChart
+          data={volume}
+          xKey="label"
+          series={[
+            { key: "total_rides", label: "Total rides", color: SERIES.one, fill: true },
+            { key: "completed_rides", label: "Completed", color: SERIES.two },
+          ]}
+          height={288}
+        />
+      </ChartCard>
     </section>
   );
 }

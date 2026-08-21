@@ -55,14 +55,27 @@ type LocationMapProps = {
   /** Extra classes for the wrapper (height lives here). */
   className?: string;
   emptyLabel?: string;
+  /**
+   * Notifies the page a pin was clicked. Supplying this makes selection
+   * *controlled*: the map stops opening its own InfoWindow and the page renders
+   * whatever detail UI it wants instead. Without it the map keeps its built-in
+   * title/subtitle bubble.
+   */
+  onMarkerSelect?: (id: string) => void;
+  /** The controlled selection, when the page owns it. */
+  selectedId?: string | null;
 };
 
 export default function LocationMap({
   markers,
   className,
   emptyLabel = "No known locations to display.",
+  onMarkerSelect,
+  selectedId: controlledId,
 }: LocationMapProps) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [uncontrolledId, setUncontrolledId] = useState<string | null>(null);
+  const controlled = onMarkerSelect !== undefined;
+  const selectedId = controlled ? controlledId ?? null : uncontrolledId;
   const wrapperClass =
     className ??
     "h-[420px] w-full overflow-hidden rounded-[16px] border border-border";
@@ -108,7 +121,9 @@ export default function LocationMap({
               key={marker.id}
               position={{ lat: marker.lat, lng: marker.lon }}
               title={marker.title}
-              onClick={() => setSelectedId(marker.id)}
+              onClick={() =>
+                controlled ? onMarkerSelect(marker.id) : setUncontrolledId(marker.id)
+              }
             >
               <Pin
                 background={marker.tone ?? BRAND_GREEN}
@@ -118,11 +133,11 @@ export default function LocationMap({
             </AdvancedMarker>
           ))}
 
-          {selected ? (
+          {selected && !controlled ? (
             <InfoWindow
               position={{ lat: selected.lat, lng: selected.lon }}
               pixelOffset={[0, -36]}
-              onCloseClick={() => setSelectedId(null)}
+              onCloseClick={() => setUncontrolledId(null)}
             >
               <div className="text-sm">
                 <span className="font-semibold">{selected.title}</span>

@@ -24,6 +24,7 @@ export default function RidesLayout({ children }: { children: React.ReactNode })
       tabs={[
         { href: "/rides/live", label: "Live", badge: liveCount },
         { href: "/rides/history", label: "History" },
+        { href: "/rides/analytics", label: "Analytics" },
       ]}
     >
       {children}
