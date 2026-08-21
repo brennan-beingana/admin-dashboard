@@ -98,8 +98,9 @@ export default function UsersPage() {
         emptyLabel="No sign-up dates to plot."
       >
         <TrendChart
-          data={growth.map((point) => ({ label: point.label, cumulative: point.cumulative }))}
-          xKey="label"
+          data={growth.map((point) => ({ ts: point.ts, cumulative: point.cumulative }))}
+          xKey="ts"
+          xType="time"
           series={[{ key: "cumulative", label: "Total users", color: SERIES.one, fill: true }]}
         />
       </ChartCard>

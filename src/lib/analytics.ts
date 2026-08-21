@@ -97,6 +97,8 @@ export function toCompletionTrend(stats: DailyRideStat[]): CompletionPoint[] {
 export type GrowthPoint = {
   date: string;
   label: string;
+  /** Epoch ms — lets the chart space points by elapsed time, not by index. */
+  ts: number;
   /** Running total at the end of this day. */
   cumulative: number;
   /** Sign-ups on this day alone. */
@@ -123,7 +125,13 @@ export function toGrowthSeries(createdAts: string[]): GrowthPoint[] {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([day, added]) => {
       running += added;
-      return { date: day, label: formatDayLabel(day), cumulative: running, added };
+      return {
+        date: day,
+        label: formatDayLabel(day),
+        ts: new Date(`${day}T00:00:00`).getTime(),
+        cumulative: running,
+        added,
+      };
     });
 }
 

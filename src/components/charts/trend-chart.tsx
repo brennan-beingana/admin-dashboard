@@ -29,6 +29,13 @@ type Props = {
   valueFormatter?: (value: number) => string;
   /** Fixes the y domain — needed for rates, where 0–100 is the real scale. */
   yDomain?: [number, number];
+  /**
+   * "time" spaces points by real elapsed time; `xKey` must then hold a numeric
+   * epoch. Use it whenever the points are irregularly spaced — a category axis
+   * draws a two-month gap the same width as one day, which turns bursty
+   * sign-ups into a smooth ramp that never happened.
+   */
+  xType?: "category" | "time";
   height?: number;
 };
 
@@ -45,9 +52,11 @@ export function TrendChart({
   series,
   valueFormatter,
   yDomain,
+  xType = "category",
   height = 260,
 }: Props) {
   const showLegend = series.length > 1;
+  const isTime = xType === "time";
 
   return (
     // Height includes the x-axis band, so the card never grows an inner scroll.
@@ -80,6 +89,18 @@ export function TrendChart({
             tick={{ fill: CHROME.axisText, fontSize: 11 }}
             tickLine={false}
             minTickGap={24}
+            {...(isTime
+              ? {
+                  type: "number" as const,
+                  scale: "time" as const,
+                  domain: ["dataMin", "dataMax"] as [string, string],
+                  tickFormatter: (value: number) =>
+                    new Date(value).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                    }),
+                }
+              : {})}
           />
           <YAxis
             stroke={CHROME.axisLine}
@@ -93,6 +114,15 @@ export function TrendChart({
           />
           <Tooltip
             contentStyle={TOOLTIP_STYLE}
+            labelFormatter={(label) =>
+              isTime
+                ? new Date(Number(label)).toLocaleDateString(undefined, {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })
+                : String(label)
+            }
             formatter={(value, name) => [
               valueFormatter ? valueFormatter(Number(value)) : String(value ?? ""),
               String(name ?? ""),

@@ -84,11 +84,9 @@ export default function RiderAnalyticsPage() {
           emptyLabel="No rider join dates to plot."
         >
           <TrendChart
-            data={growth.map((point) => ({
-              label: point.label,
-              cumulative: point.cumulative,
-            }))}
-            xKey="label"
+            data={growth.map((point) => ({ ts: point.ts, cumulative: point.cumulative }))}
+            xKey="ts"
+            xType="time"
             series={[{ key: "cumulative", label: "Total riders", color: SERIES.one, fill: true }]}
           />
         </ChartCard>

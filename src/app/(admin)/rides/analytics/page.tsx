@@ -142,7 +142,7 @@ export default function RideAnalyticsPage() {
 
         <ChartCard
           title="Completion rate trend"
-          description="Share of each day's rides that finished. Days with no rides are omitted rather than drawn as zero."
+          description="Share of each day's rides that finished. Zero-ride days are omitted, not drawn as 0%."
           columns={[
             { key: "label", label: "Day" },
             { key: "rate", label: "Completion", numeric: true },

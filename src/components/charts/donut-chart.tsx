@@ -30,6 +30,27 @@ export function DonutChart({ slices, centerValue, centerLabel, height = 260 }: P
   const total = slices.reduce((sum, slice) => sum + slice.value, 0);
   const share = (value: number) => (total > 0 ? (value / total) * 100 : 0);
 
+  // A ring that is one unbroken 100% slice compares nothing. The number is the
+  // chart in that case, so show it as a stat tile instead of a fake donut.
+  if (slices.length === 1) {
+    const only = slices[0];
+    return (
+      <div className="flex items-center gap-4 py-6">
+        <span
+          aria-hidden
+          className="h-10 w-1.5 shrink-0 rounded-full"
+          style={{ background: only.color }}
+        />
+        <div>
+          <p className="text-4xl font-semibold">{centerValue}</p>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">
+            {centerLabel} — all {only.label.toLowerCase()}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-6">
       <div style={{ height, width: height }} className="relative shrink-0">
@@ -69,7 +90,7 @@ export function DonutChart({ slices, centerValue, centerLabel, height = 260 }: P
         </div>
       </div>
 
-      <ul className="min-w-[12rem] flex-1 space-y-1.5">
+      <ul className="w-full max-w-xs space-y-1.5 sm:w-auto sm:min-w-[15rem]">
         {slices.map((slice) => (
           <li key={slice.key} className="flex items-center gap-2 text-sm">
             <span
