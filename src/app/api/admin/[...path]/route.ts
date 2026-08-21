@@ -1,4 +1,5 @@
 import { backendApiBaseUrl, adminApiPrefix } from "@/lib/config";
+import type { ApiError } from "@/lib/types";
 
 const METHODS_WITHOUT_BODY = new Set(["GET", "HEAD"]);
 
@@ -36,14 +37,48 @@ async function proxy(req: Request, params: { path: string[] }) {
     }
   }
 
-  const upstreamResponse = await fetch(upstreamUrl, init);
+  let upstreamResponse: Response;
+  try {
+    upstreamResponse = await fetch(upstreamUrl, init);
+  } catch (cause) {
+    // Unreachable host — DNS failure, refused connection, bad TLS. Name the
+    // host, because the whole point is to make a misconfigured backend obvious.
+    return backendError(
+      502,
+      `Cannot reach the backend at ${upstreamUrl.origin}`,
+      cause instanceof Error ? cause.message : String(cause),
+    );
+  }
+
   const text = await upstreamResponse.text();
+  const upstreamContentType = upstreamResponse.headers.get("content-type") ?? "";
+
+  // The API only ever speaks JSON. Anything else means we are not talking to it
+  // — we are talking to whatever is squatting on that hostname. Passing that
+  // through verbatim is how a retired Render backend's HTML "Service Suspended"
+  // page reached the browser as a bare 503 on every admin call, with nothing
+  // naming the real culprit. Convert it into an error that says where it came from.
+  if (!upstreamContentType.includes("application/json")) {
+    return backendError(
+      upstreamResponse.status === 200 ? 502 : upstreamResponse.status,
+      `Backend at ${upstreamUrl.origin} did not return JSON`,
+      `${upstreamResponse.status} ${upstreamResponse.statusText} (content-type: ${
+        upstreamContentType || "none"
+      })`,
+    );
+  }
 
   return new Response(text, {
     status: upstreamResponse.status,
-    headers: {
-      "content-type": upstreamResponse.headers.get("content-type") ?? "application/json",
-    },
+    headers: { "content-type": upstreamContentType },
+  });
+}
+
+function backendError(status: number, error: string, details: string) {
+  console.error(`[admin-proxy] ${error} — ${details}`);
+  return new Response(JSON.stringify({ error, details } satisfies ApiError), {
+    status,
+    headers: { "content-type": "application/json" },
   });
 }
 

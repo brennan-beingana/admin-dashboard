@@ -168,10 +168,20 @@ export type DeliveriesResponse = {
   deliveries: Delivery[];
 };
 
+// Mirrors `ListChargingStations` in ebike-api: the query selects
+// `ST_X(location) AS longitude, ST_Y(location) AS latitude`, so coordinates
+// arrive as two numbers. There is no `location` field — this type used to
+// declare one, and because the response is cast at the boundary rather than
+// validated, every read of it was silently `undefined`: no map markers, a blank
+// Location column, and an edit form that came up empty.
+// `location_string` is a nullable human label, not coordinates.
 export type ChargingStation = {
   id: string;
   name: string;
-  location: string;
+  description?: string | null;
+  latitude: number;
+  longitude: number;
+  location_string?: string | null;
   capacity: number;
   meta?: Record<string, unknown>;
   created_at: string;
